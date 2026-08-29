@@ -1,0 +1,1882 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Fastmeeting</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
+<style>
+  :root{
+    --bg-0:#0d1210;
+    --bg-1:#141b18;
+    --bg-2:#1b2420;
+    --line:#2a362f;
+    --dial:#ff8a34;
+    --dial-dim:#8a5228;
+    --amber:#ffb454;
+    --green:#5fd68a;
+    --red:#e8604c;
+    --text-0:#eef2ee;
+    --text-1:#9fb0a6;
+    --text-2:#5c6b61;
+    --mono: 'Space Mono','Courier New',monospace;
+    --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif;
+  }
+  @font-face{
+    font-family:'Space Mono';
+    src:local('Space Mono');
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:
+      radial-gradient(ellipse at 50% -10%, #1c2620 0%, transparent 60%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 3px),
+      var(--bg-0);
+    color:var(--text-0);
+    font-family:var(--sans);
+    overscroll-behavior:none;
+  }
+  #app{min-height:100dvh; display:flex; flex-direction:column;}
+  ::selection{background:var(--dial); color:#1a1000;}
+
+  /* ---------- shared bits ---------- */
+  .screen{flex:1; display:flex; flex-direction:column; padding:20px 18px 24px; max-width:520px; margin:0 auto; width:100%;}
+  .hidden{display:none !important;}
+
+  .brand{
+    display:flex; align-items:baseline; gap:10px; margin-bottom:4px;
+  }
+  .brand .mark{
+    width:10px; height:10px; border-radius:50%;
+    background:var(--dial); box-shadow:0 0 10px 2px rgba(255,138,52,0.6);
+  }
+  .brand h1{
+    font-family:var(--sans); font-size:20px; letter-spacing:-0.02em;
+    color:var(--text-0); margin:0; font-weight:800;
+  }
+  .brand h1 span{color:var(--dial);}
+  .brand .sub-brand{
+    font-family:var(--mono); font-size:10px; letter-spacing:0.18em; color:var(--text-2);
+    text-transform:uppercase; border-left:1px solid var(--line); padding-left:9px; margin-left:1px;
+  }
+  .subtag{font-family:var(--mono); font-size:11px; color:var(--text-2); letter-spacing:0.08em; margin-bottom:28px;}
+
+  .panel{
+    background:linear-gradient(180deg, var(--bg-1), var(--bg-2));
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:22px;
+    position:relative;
+  }
+  .panel + .panel{margin-top:14px;}
+
+  label.field-label{
+    display:block; font-family:var(--mono); font-size:10.5px; letter-spacing:0.14em;
+    text-transform:uppercase; color:var(--text-2); margin-bottom:8px;
+  }
+  input[type=text]{
+    width:100%; background:var(--bg-0); border:1px solid var(--line); border-radius:9px;
+    padding:13px 14px; color:var(--text-0); font-family:var(--sans); font-size:15px;
+    outline:none; transition:border-color .15s;
+  }
+  input[type=text]:focus{border-color:var(--dial-dim);}
+  input.room-code{
+    font-family:var(--mono); font-size:22px; letter-spacing:0.18em; text-align:center;
+  }
+
+  button{
+    font-family:var(--sans); border:none; cursor:pointer; -webkit-appearance:none;
+  }
+  .btn{
+    width:100%; padding:14px 18px; border-radius:9px; font-size:15px; font-weight:600;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    transition:transform .08s, filter .15s; letter-spacing:0.01em;
+  }
+  .btn:active{transform:scale(0.98);}
+  .btn-primary{
+    background:linear-gradient(180deg, #ff9b4d, var(--dial));
+    color:#1a0f00; box-shadow:0 4px 14px rgba(255,138,52,0.25);
+  }
+  .btn-primary:hover{filter:brightness(1.05);}
+  .btn-ghost{
+    background:transparent; border:1px solid var(--line); color:var(--text-1);
+  }
+  .btn-ghost:hover{border-color:var(--dial-dim); color:var(--text-0);}
+  .btn-danger{background:var(--red); color:#2a0a05;}
+  .btn-sm{padding:9px 14px; font-size:13px; width:auto;}
+  .btn:disabled{opacity:0.4; cursor:not-allowed;}
+
+  .room-type-row{display:flex; gap:10px;}
+  .room-type-btn{
+    flex-direction:column; gap:4px; padding:16px 10px; min-height:76px;
+  }
+  .room-type-btn .rt-ic{font-size:20px;}
+  .room-type-btn .rt-label{font-size:13.5px; font-weight:700; line-height:1.5;}
+  .room-type-btn .rt-sub{font-family:var(--mono); font-size:10px; font-weight:400; opacity:0.75;}
+  .room-type-btn.video-variant{
+    background:linear-gradient(180deg, #6fc9ff, #3d9ce8); color:#001320;
+    box-shadow:0 4px 14px rgba(61,156,232,0.25);
+  }
+
+  .room-type-badge{
+    display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11px;
+    letter-spacing:0.08em; padding:6px 12px; border-radius:20px; margin-top:2px;
+  }
+  .room-type-badge.voice{background:rgba(255,138,52,0.12); color:var(--dial); border:1px solid var(--dial-dim);}
+  .room-type-badge.video{background:rgba(61,156,232,0.14); color:#6fc9ff; border:1px solid #2b6a99;}
+
+  .divider-or{
+    display:flex; align-items:center; gap:12px; margin:18px 0;
+    font-family:var(--mono); font-size:10px; letter-spacing:0.2em; color:var(--text-2);
+  }
+  .divider-or::before, .divider-or::after{content:''; flex:1; height:1px; background:var(--line);}
+
+  .hint{font-family:var(--mono); font-size:11px; color:var(--text-2); margin-top:10px; line-height:1.6;}
+  .hint b{color:var(--amber);}
+
+  .toast-wrap{
+    position:fixed; top:16px; left:50%; transform:translateX(-50%);
+    z-index:200; display:flex; flex-direction:column; gap:8px; align-items:center;
+    width:100%; max-width:480px; padding:0 16px; pointer-events:none;
+  }
+  .toast{
+    font-family:var(--mono); font-size:12.5px; background:var(--bg-2); border:1px solid var(--line);
+    color:var(--text-0); padding:11px 16px; border-radius:9px; box-shadow:0 6px 24px rgba(0,0,0,0.4);
+    animation:toastIn .25s ease-out; max-width:100%;
+  }
+  @keyframes toastIn{from{opacity:0; transform:translateY(-8px);} to{opacity:1; transform:translateY(0);}}
+
+  /* ---------- landing ---------- */
+  #view-landing .panel-title{
+    font-family:var(--mono); font-size:12px; letter-spacing:0.12em; text-transform:uppercase;
+    color:var(--dial); margin:0 0 16px; display:flex; align-items:center; gap:8px;
+  }
+  .my-id-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    font-family:var(--mono); font-size:11px; color:var(--text-2); margin-bottom:22px;
+  }
+  .my-id-row span.id-val{color:var(--text-1);}
+
+  /* ---------- waiting room (host) ---------- */
+  .roomcode-hero{
+    text-align:center; padding:18px 0 6px;
+  }
+  .roomcode-hero .num{
+    font-family:var(--mono); font-size:64px; font-weight:700; color:var(--dial);
+    line-height:1; letter-spacing:-0.02em; text-shadow:0 0 30px rgba(255,138,52,0.25);
+  }
+  .roomcode-hero .lbl{
+    font-family:var(--mono); font-size:11px; letter-spacing:0.2em; color:var(--text-2); margin-top:8px; text-transform:uppercase;
+  }
+  .occupancy{
+    text-align:center; font-family:var(--mono); font-size:14px; color:var(--text-1);
+    margin:14px 0 20px; letter-spacing:0.08em;
+  }
+  .occupancy b{color:var(--text-0); font-size:16px;}
+
+  .roster{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px;}
+  .roster li{
+    display:flex; align-items:center; gap:10px; padding:12px 14px;
+    background:var(--bg-0); border:1px solid var(--line); border-radius:9px;
+    font-size:15px;
+  }
+  .roster li .name{flex:1; color:var(--text-0); font-weight:600;}
+  .roster li .tag-host{
+    font-family:var(--mono); font-size:12.5px; color:var(--dial); font-weight:500;
+    letter-spacing:0.02em; margin-left:2px;
+  }
+
+  /* ---------- incoming request list (tap name to expand accept/deny) ---------- */
+  .request-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px;}
+  .request-row{
+    background:var(--bg-2); border:1px solid var(--dial-dim); border-radius:12px;
+    overflow:hidden; animation:slideIn .2s ease-out;
+  }
+  @keyframes slideIn{from{opacity:0; transform:translateY(-6px);} to{opacity:1; transform:translateY(0);}}
+  .request-row .req-head{
+    display:flex; align-items:center; gap:10px; padding:13px 14px; cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .request-row .req-pulse{
+    width:8px; height:8px; border-radius:50%; background:var(--amber); flex-shrink:0;
+    box-shadow:0 0 8px 2px rgba(255,180,84,0.5); animation:pulseDot 1.4s infinite;
+  }
+  @keyframes pulseDot{0%,100%{opacity:1;} 50%{opacity:0.35;}}
+  .request-row .req-name{flex:1; font-size:14.5px; font-weight:600; color:var(--text-0);}
+  .request-row .req-hint{font-family:var(--mono); font-size:10.5px; color:var(--text-2); letter-spacing:0.04em;}
+  .request-row .req-chevron{color:var(--text-2); font-size:12px; transition:transform .15s;}
+  .request-row.open .req-chevron{transform:rotate(180deg);}
+  .request-row .request-actions{
+    display:none; gap:8px; padding:0 14px 14px;
+  }
+  .request-row.open .request-actions{display:flex;}
+  .request-actions .btn{flex:1;}
+
+  /* ---------- in-call screen ---------- */
+  #view-call{padding:0; max-width:none;}
+  .call-top{
+    padding:16px 18px 14px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between;
+    background:var(--bg-1);
+  }
+  .call-top .chan{
+    font-family:var(--mono); font-size:13px; letter-spacing:0.1em; color:var(--text-1);
+  }
+  .call-top .chan b{color:var(--dial); font-size:16px;}
+  .call-timer{font-family:var(--mono); font-size:12px; color:var(--text-2);}
+
+  .join-request-badge{
+    font-family:var(--mono); font-size:11.5px; letter-spacing:0.04em;
+    background:var(--amber); color:#1a0f00; border:none; border-radius:20px;
+    padding:6px 12px; font-weight:700; animation:knockPulse 1.4s ease-in-out infinite;
+  }
+  @keyframes knockPulse{0%,100%{opacity:1;} 50%{opacity:0.65;}}
+
+  .broadcast-banner{
+    background:linear-gradient(90deg, #ff9b4d, var(--dial));
+    color:#1a0f00; padding:13px 18px; font-size:14.5px; font-weight:700;
+    display:flex; align-items:center; gap:8px; overflow:hidden;
+    animation:broadcastSlide .25s ease-out;
+  }
+  .broadcast-banner::before{content:'📢'; font-size:15px;}
+  .broadcast-banner b{font-weight:800; margin-right:2px;}
+  @keyframes broadcastSlide{
+    from{max-height:0; padding-top:0; padding-bottom:0; opacity:0;}
+    to{max-height:60px; padding-top:13px; padding-bottom:13px; opacity:1;}
+  }
+
+  .mention-banner{
+    background:linear-gradient(90deg, #3ddc9c, #2bb87f);
+    color:#03251a; padding:13px 18px; font-size:14.5px; font-weight:700;
+    display:flex; align-items:center; gap:8px; overflow:hidden;
+    animation:broadcastSlide .25s ease-out;
+  }
+  .mention-banner::before{content:'📣'; font-size:15px;}
+
+  .call-body{
+    flex:1; max-width:520px; margin:0 auto; width:100%; padding:18px; overflow-y:auto;
+  }
+  .speaker-grid{
+    display:grid; grid-template-columns:repeat(3, 1fr); gap:12px;
+  }
+  .alone-notice{
+    text-align:center; font-family:var(--mono); font-size:13px; color:var(--text-2);
+    letter-spacing:0.04em; padding:10px 0 18px;
+  }
+  .speaker-tile{
+    aspect-ratio:1; border-radius:14px; background:var(--bg-1); border:1px solid var(--line);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+    position:relative; padding:12px 8px;
+  }
+  .speaker-tile.speaking{border-color:var(--green); box-shadow:0 0 0 3px rgba(95,214,138,0.15);}
+  .speaker-tile .mic-pulse{
+    width:10px; height:10px; border-radius:50%; background:var(--line); flex-shrink:0;
+    transition:background .15s;
+  }
+  .speaker-tile.speaking .mic-pulse{background:var(--green); box-shadow:0 0 8px 2px rgba(95,214,138,0.5);}
+  .speaker-tile .sname{
+    font-size:15px; font-weight:700; color:var(--text-0); text-align:center; max-width:100%;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; width:100%; line-height:1.3;
+  }
+  .speaker-tile.speaking .sname{color:var(--green);}
+  .speaker-tile.me .sname{color:var(--dial);}
+  .speaker-tile.me.speaking .sname{color:var(--green);}
+  .speaker-tile .tag-host2{
+    position:absolute; top:6px; right:6px; font-family:var(--mono); font-size:8px; color:var(--dial);
+    border:1px solid var(--dial-dim); padding:1px 4px; border-radius:4px;
+  }
+  .speaker-tile .mic-off{
+    position:absolute; bottom:6px; right:6px; width:16px; height:16px; border-radius:50%;
+    background:var(--red); display:flex; align-items:center; justify-content:center; font-size:9px;
+  }
+  .speaker-tile.has-video{padding:0; overflow:hidden;}
+  .speaker-tile.has-video .video-slot{
+    position:absolute; inset:0; border-radius:14px; overflow:hidden; background:#05100c;
+  }
+  .speaker-tile.has-video .tile-video{
+    width:100%; height:100%; object-fit:cover; display:block; background:#05100c;
+  }
+  .speaker-tile.has-video .mic-pulse{
+    position:absolute; bottom:8px; left:8px; z-index:2;
+  }
+  .speaker-tile.has-video .sname{
+    position:absolute; bottom:6px; left:20px; right:8px; z-index:2; text-align:left;
+    text-shadow:0 1px 4px rgba(0,0,0,0.85); font-size:12.5px;
+  }
+  .speaker-tile.has-video .tag-host2{z-index:2;}
+
+  .call-controls{
+    padding:16px 18px calc(20px + env(safe-area-inset-bottom)); background:var(--bg-1); border-top:1px solid var(--line);
+  }
+  .controls-row{
+    display:flex; gap:10px; max-width:520px; margin:0 auto; flex-wrap:wrap;
+  }
+  .ctrl-btn{
+    flex:1; min-width:70px; display:flex; flex-direction:column; align-items:center; gap:6px;
+    padding:12px 6px; border-radius:12px; background:var(--bg-2); border:1px solid var(--line);
+    color:var(--text-1); font-size:11px; font-family:var(--sans); position:relative;
+  }
+  .ctrl-btn .ic{font-size:19px;}
+  .ctrl-btn.active{background:var(--dial); color:#1a0f00; border-color:var(--dial);}
+  .ctrl-btn.mute-on{background:var(--red); color:#fff; border-color:var(--red);}
+  .ctrl-btn.leave{background:var(--red); color:#fff; border-color:var(--red);}
+  .badge-dot{
+    position:absolute; top:5px; right:14px; width:8px; height:8px; border-radius:50%;
+    background:var(--amber); border:1.5px solid var(--bg-2); display:none;
+  }
+  .badge-dot.show{display:block;}
+
+  .end-fill-hint{
+    text-align:center; font-family:var(--mono); font-size:10.5px; color:var(--text-2); margin-top:12px; letter-spacing:0.04em;
+  }
+
+  /* ---------- overlays: chat / mention / kick ---------- */
+  .overlay{
+    position:fixed; inset:0; background:rgba(6,9,7,0.72); backdrop-filter:blur(6px);
+    z-index:150; display:flex; align-items:flex-end; justify-content:center;
+  }
+  .overlay.center{align-items:center; padding:20px;}
+  .sheet{
+    width:100%; max-width:520px; background:var(--bg-1); border:1px solid var(--line); border-top-left-radius:18px; border-top-right-radius:18px;
+    max-height:85dvh; display:flex; flex-direction:column; animation:sheetUp .22s ease-out;
+  }
+  .overlay.center .sheet{border-radius:16px; max-height:90dvh;}
+  @keyframes sheetUp{from{transform:translateY(24px); opacity:0;} to{transform:translateY(0); opacity:1;}}
+  .sheet-head{
+    display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid var(--line);
+  }
+  .sheet-head h2{margin:0; font-family:var(--mono); font-size:13px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-0);}
+  .sheet-close{background:none; color:var(--text-2); font-size:20px; line-height:1; padding:4px 8px;}
+  .sheet-body{padding:16px 18px; overflow-y:auto; flex:1;}
+  .sheet-foot{padding:12px 18px calc(14px + env(safe-area-inset-bottom)); border-top:1px solid var(--line);}
+
+  /* chat */
+  .chat-log{display:flex; flex-direction:column; gap:10px; min-height:120px;}
+  .chat-empty{font-family:var(--mono); font-size:12px; color:var(--text-2); text-align:center; padding:30px 0;}
+  .chat-line{font-size:14px; line-height:1.5;}
+  .chat-line .who{font-family:var(--mono); font-size:12px; color:var(--amber); margin-right:6px;}
+  .chat-line.me .who{color:var(--dial);}
+  .chat-line .msgtxt{color:var(--text-0); word-break:break-word;}
+  .chat-line .sys{color:var(--text-2); font-family:var(--mono); font-size:12px;}
+  .chat-input-row{display:flex; gap:8px;}
+  .chat-input-row input{flex:1;}
+  .send-btn{
+    width:46px; height:46px; border-radius:9px; background:var(--dial); color:#1a0f00;
+    display:flex; align-items:center; justify-content:center; font-size:17px; flex-shrink:0;
+  }
+
+  /* mention */
+  .mention-list{display:flex; flex-direction:column; gap:2px;}
+  .mention-row{
+    display:flex; align-items:center; gap:12px; padding:13px 6px; border-bottom:1px solid var(--line);
+    cursor:pointer; -webkit-tap-highlight-color:transparent;
+  }
+  .mention-row:last-child{border-bottom:none;}
+  .mention-row input[type=checkbox]{
+    width:22px; height:22px; accent-color:var(--dial); flex-shrink:0;
+  }
+  .mention-row span{flex:1; font-size:15.5px; font-weight:600; color:var(--text-0);}
+  .mention-empty{font-family:var(--mono); font-size:12px; color:var(--text-2); text-align:center; padding:24px 0;}
+
+  /* kick target list (reuse roster-like) */
+  .kick-list{display:flex; flex-direction:column; gap:8px;}
+  .kick-row{
+    display:flex; align-items:center; gap:10px; padding:11px 13px; background:var(--bg-0);
+    border:1px solid var(--line); border-radius:9px;
+  }
+  .kick-row .name{flex:1; font-size:14px;}
+  .kick-row button{
+    font-family:var(--mono); font-size:11px; padding:7px 12px; border-radius:7px;
+    background:transparent; border:1px solid var(--red); color:var(--red);
+  }
+
+  /* confirm modal */
+  .confirm-box{
+    background:var(--bg-1); border:1px solid var(--line); border-radius:14px; padding:22px; max-width:340px; width:100%;
+    text-align:center;
+  }
+  .confirm-box p{font-size:15px; line-height:1.6; margin:0 0 20px;}
+  .confirm-box .row{display:flex; gap:10px;}
+  .confirm-box .row .btn{flex:1;}
+
+  /* end screen */
+  #view-ended{align-items:center; justify-content:center; text-align:center;}
+  #view-ended .end-icon{font-size:40px; margin-bottom:16px;}
+  #view-ended p{font-family:var(--mono); font-size:14px; color:var(--text-1); line-height:1.7; margin-bottom:26px; letter-spacing:0.02em;}
+
+  /* loading dots */
+  .loading-line{
+    font-family:var(--mono); font-size:12px; color:var(--text-2); text-align:center; padding:14px 0;
+  }
+  .dot-flicker::after{content:'●●●'; letter-spacing:3px; animation:flick 1.2s infinite steps(1);}
+  @keyframes flick{0%,100%{opacity:0.2;}33%{opacity:1;}66%{opacity:0.2;}}
+
+  @media (max-width:380px){
+    .roomcode-hero .num{font-size:52px;}
+    .speaker-grid{grid-template-columns:repeat(3,1fr);}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="toast-wrap" id="toastWrap"></div>
+
+  <!-- ================= LANDING ================= -->
+  <div class="screen" id="view-landing">
+    <div class="brand"><span class="mark"></span><h1>Fast<span>meeting</span></h1><span class="sub-brand">채널</span></div>
+    <div class="subtag">// 편리한 즉석 회의</div>
+
+    <div class="panel">
+      <div class="panel-title">01 — 닉네임</div>
+      <label class="field-label">이 방에서 쓸 이름</label>
+      <input type="text" id="nicknameInput" placeholder="예: 지훈" maxlength="12">
+    </div>
+
+    <div class="panel" style="margin-top:14px;">
+      <div class="panel-title">02 — 방 만들기</div>
+      <p class="hint" style="margin-top:0;">비어있는 가장 작은 번호로 방이 열려요.<br>영상통화는 연결 부하가 커서 인원이 더 적어요.</p>
+      <div class="room-type-row">
+        <button class="btn btn-primary room-type-btn" id="btnCreateVoice">
+          <span class="rt-ic">🎙️</span>
+          <span class="rt-label">음성통화 방<br><span class="rt-sub">최대 12인</span></span>
+        </button>
+        <button class="btn btn-primary room-type-btn video-variant" id="btnCreateVideo">
+          <span class="rt-ic">🎥</span>
+          <span class="rt-label">영상통화 방<br><span class="rt-sub">최대 6인</span></span>
+        </button>
+      </div>
+      <div id="createStatus" class="loading-line hidden">빈 채널 확인 중<span class="dot-flicker"></span></div>
+    </div>
+
+    <div class="divider-or">또는</div>
+
+    <div class="panel">
+      <div class="panel-title">03 — 참가하기</div>
+      <label class="field-label">채널 번호</label>
+      <input type="text" id="joinCodeInput" class="room-code" inputmode="numeric" pattern="[0-9]*" placeholder="18" maxlength="4">
+      <button class="btn btn-ghost" id="btnJoinRoom" style="margin-top:12px;">참가하기</button>
+      <div id="joinStatus" class="loading-line hidden">연결 중<span class="dot-flicker"></span></div>
+    </div>
+
+    <div class="hint" id="myIdHint" style="text-align:center; margin-top:20px;"></div>
+  </div>
+
+  <!-- ================= WAITING (join, before accepted) ================= -->
+  <div class="screen hidden" id="view-pending">
+    <div class="brand"><span class="mark"></span><h1>Fast<span>meeting</span></h1><span class="sub-brand">채널</span></div>
+    <div class="subtag">// 입장 대기</div>
+    <div class="panel" style="text-align:center; padding:40px 22px;">
+      <div class="roomcode-hero" style="padding-top:0;">
+        <div class="num" id="pendingRoomNum">--</div>
+        <div class="lbl">채널</div>
+      </div>
+      <span class="room-type-badge" id="pendingRoomTypeBadge" style="display:none;"></span>
+      <div class="loading-line dot-flicker" style="margin-top:18px;">방장의 수락을 기다리는 중</div>
+      <button class="btn btn-ghost" id="btnCancelJoin" style="margin-top:26px;">취소</button>
+    </div>
+  </div>
+
+  <!-- ================= IN CALL ================= -->
+  <div class="screen hidden" id="view-call">
+    <div class="call-top">
+      <div class="chan"><span id="callTypeIcon">🎙️</span> 채널 <b id="callRoomNum">1</b></div>
+      <button class="join-request-badge hidden" id="btnJoinRequests">🔔 입장 요청 <span id="joinRequestCount">0</span></button>
+      <div class="call-timer" id="callTimer">00:00</div>
+    </div>
+    <div id="broadcastBanner" class="broadcast-banner hidden"></div>
+    <div id="mentionBanner" class="mention-banner hidden"></div>
+    <div class="call-body">
+      <div id="aloneNotice" class="alone-notice hidden">
+        <span class="dot-flicker">다른 사용자를 기다리는 중입니다</span>
+      </div>
+      <div class="speaker-grid" id="speakerGrid"></div>
+    </div>
+    <div class="call-controls">
+      <div class="controls-row">
+        <button class="ctrl-btn" id="btnMute"><span class="ic">🎙️</span>음소거</button>
+        <button class="ctrl-btn hidden" id="btnCamera"><span class="ic">🎥</span>카메라</button>
+        <button class="ctrl-btn" id="btnChat"><span class="ic">💬</span>메시지<span class="badge-dot" id="chatBadge"></span></button>
+        <button class="ctrl-btn hidden" id="btnMention"><span class="ic">📣</span>멘션</button>
+        <button class="ctrl-btn hidden" id="btnBroadcast"><span class="ic">📢</span>방송</button>
+        <button class="ctrl-btn hidden" id="btnKick"><span class="ic">🚪</span>내보내기</button>
+        <button class="ctrl-btn leave" id="btnLeave"><span class="ic">✕</span>퇴장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= ENDED ================= -->
+  <div class="screen hidden" id="view-ended">
+    <div class="brand" style="justify-content:center; margin-bottom:30px;"><span class="mark"></span><h1>Fast<span>meeting</span></h1></div>
+    <div class="end-icon">📡</div>
+    <p id="endedMessage">통화가 종료되었습니다.</p>
+    <button class="btn btn-primary" id="btnBackToMain" style="max-width:240px;">메인으로</button>
+  </div>
+
+</div>
+
+<!-- ============ CHAT OVERLAY ============ -->
+<div class="overlay hidden" id="overlayChat">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h2>통화 중 메시지</h2>
+      <button class="sheet-close" id="closeChat">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="chat-log" id="chatLog"><div class="chat-empty">아직 메시지가 없어요.</div></div>
+    </div>
+    <div class="sheet-foot">
+      <div class="chat-input-row">
+        <input type="text" id="chatInput" placeholder="메시지 입력..." maxlength="300">
+        <button class="send-btn" id="btnSendChat">↑</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MENTION OVERLAY (host only) ============ -->
+<!-- ============ BROADCAST OVERLAY (host only) ============ -->
+<div class="overlay hidden" id="overlayBroadcast">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h2>방송하기</h2>
+      <button class="sheet-close" id="closeBroadcast">✕</button>
+    </div>
+    <div class="sheet-body">
+      <p class="hint" style="margin-top:0;">전체 화면에 10초간 크게 표시돼요. 채팅 로그에는 남지 않아요. (최대 100자)</p>
+      <input type="text" id="broadcastInput" placeholder="방송할 내용을 입력하세요" maxlength="100">
+    </div>
+    <div class="sheet-foot">
+      <button class="btn btn-primary" id="btnSendBroadcast">📢 방송 보내기</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="overlayMention">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h2>멘션 보내기</h2>
+      <button class="sheet-close" id="closeMention">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="mention-list" id="mentionList"></div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn btn-primary" id="btnSendMention">멘션 보내기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ KICK OVERLAY (host only) ============ -->
+<div class="overlay hidden" id="overlayKick">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h2>내보내기</h2>
+      <button class="sheet-close" id="closeKick">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="kick-list" id="kickList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ IN-CALL JOIN REQUESTS OVERLAY (host only) ============ -->
+<div class="overlay hidden" id="overlayJoinRequests">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h2>입장 요청 · 이름을 눌러 수락/거절</h2>
+      <button class="sheet-close" id="closeJoinRequests">✕</button>
+    </div>
+    <div class="sheet-body">
+      <ul class="request-list" id="callIncomingRequests"></ul>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CONFIRM KICK MODAL ============ -->
+<div class="overlay center hidden" id="overlayConfirmKick">
+  <div class="confirm-box">
+    <p id="confirmKickText">이 사람을 내보내시겠습니까?</p>
+    <div class="row">
+      <button class="btn btn-ghost" id="btnCancelKick">취소</button>
+      <button class="btn btn-danger" id="btnConfirmKick">확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ INCOMING REQUEST SOUND / GLOBAL AUDIO ============ -->
+<audio id="sfxKnock" preload="auto"></audio>
+<audio id="sfxDing" preload="auto"></audio>
+<audio id="sfxConnect" preload="auto"></audio>
+<audio id="sfxMention" preload="auto"></audio>
+<audio id="remoteAudioContainer" class="hidden"></audio>
+
+<script>
+/* ============================================================
+   Fastmeeting — 번호로 여는 음성 교신 (PeerJS)
+   Room ID scheme: "voiceroom-channel-<N>"
+   Host is the star-topology hub for signaling & relaying chat/mention/kick.
+   All peers mesh-connect their MediaStreams directly to each other.
+   ============================================================ */
+
+(function(){
+"use strict";
+
+const ROOM_PREFIX = "voiceroom-channel-";
+const MAX_TRY = 999;
+const MAX_MEMBERS_BY_TYPE = { voice: 12, video: 6 };
+
+// ---------- tiny WebAudio SFX (no external files needed) ----------
+const actx = (window.AudioContext || window.webkitAudioContext) ? new (window.AudioContext || window.webkitAudioContext)() : null;
+function beep(freqs, dur=0.12, type='sine', gap=0.0, vol=0.22){
+  if(!actx) return;
+  if(actx.state === 'suspended') actx.resume();
+  let t = actx.currentTime;
+  freqs.forEach((f,i)=>{
+    const o = actx.createOscillator();
+    const g = actx.createGain();
+    o.type = type; o.frequency.value = f;
+    o.connect(g); g.connect(actx.destination);
+    const start = t + i*(dur+gap);
+    g.gain.setValueAtTime(0, start);
+    g.gain.linearRampToValueAtTime(vol, start+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, start+dur);
+    o.start(start); o.stop(start+dur+0.02);
+  });
+}
+const sfx = {
+  // 입장 요청 도착 - 방장 폰에 "띠링" (또렷한 2음 상승)
+  knock: ()=>beep([880,1180], 0.09, 'triangle', 0.05, 0.25),
+
+  // 채팅 메시지 - 카카오톡 특유의 가볍고 통통 튀는 "톡" 느낌. 짧고 크게, 잔향 없이.
+  chatPop: ()=>beep([1200,1900], 0.1, 'sine', 0.005, 0.26),
+
+  // 멘션 - "띵동!" 두 음이 또렷하게 위로 튀는 초인종 느낌
+  mention: ()=>beep([1046,1568], 0.13, 'sine', 0.02, 0.30),
+
+  // 통화 시작 - 축하 팡파레 느낌의 4음 상승
+  connect: ()=>beep([440,554,659,880], 0.09, 'sine', 0.02, 0.22),
+
+  // 시스템 알림(입장/퇴장/방장 나감 등) - "띠링-" 은은하게 퍼지는 하강 2음
+  systemChime: ()=>beep([987,740], 0.16, 'triangle', 0.06, 0.20),
+
+  // 방송 - 눈에 띄는 3음 알림 (스피커 안내방송 느낌)
+  broadcast: ()=>beep([784,988,1318], 0.10, 'square', 0.03, 0.20),
+
+  // 퇴장 - 참가자가 나갔을 때 또렷하게 구분되는 하강 2음 (systemChime보다 낮고 짧게)
+  leave: ()=>beep([660,392], 0.11, 'triangle', 0.03, 0.22),
+};
+
+// ---------- state ----------
+let myPeer = null;
+let myId = null;
+let myNickname = "";
+let isHost = false;
+let roomNumber = null;
+let roomType = 'voice';           // 'voice' | 'video' — determined at room creation, shared with joiners
+let maxMembers = MAX_MEMBERS_BY_TYPE.voice;
+
+// host-only: map peerId -> {conn, nickname, mediaCall, id: numericSeat}
+let members = new Map();      // peerId -> {conn, nickname, joinedAt, seat}
+let pendingRequests = new Map(); // peerId -> {conn, nickname}
+let callStarted = false;
+
+// participant-only
+let hostConn = null;
+let hostPeerId = null;
+let myAssignedName = "";
+
+// shared
+let localStream = null;
+let remoteStreams = new Map(); // peerId -> {stream, nickname, audioEl, isHost}
+let peerConnections = new Map(); // for mesh audio: peerId -> RTCPeerCallObj (peer.call)
+let dataConns = new Map(); // peerId -> DataConnection (mesh chat relay when needed; host is hub though)
+let roomRosterCache = []; // [{id, nickname, isHost}]
+let muted = false;
+let callTimerInterval = null;
+let callStartTime = null;
+let unreadChat = 0;
+let chatMessages = []; // {who, text, sys}
+let speakingDetectors = new Map();
+
+// ---------- DOM ----------
+const $ = (id)=>document.getElementById(id);
+const views = {
+  landing: $('view-landing'),
+  pending: $('view-pending'),
+  call: $('view-call'),
+  ended: $('view-ended'),
+};
+function showView(name){
+  Object.values(views).forEach(v=>v.classList.add('hidden'));
+  views[name].classList.remove('hidden');
+}
+function toast(msg, opts){
+  const wrap = $('toastWrap');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  wrap.appendChild(el);
+  setTimeout(()=>{ el.style.transition='opacity .3s'; el.style.opacity='0'; setTimeout(()=>el.remove(), 300); }, 3200);
+  if(!opts || opts.speak !== false) speak(msg);
+}
+
+// ---------- TTS: 채팅 메시지를 제외한 모든 알림을 음성으로도 읽어준다 ----------
+let ttsPreferredVoice = null;
+function initTTSVoices(){
+  if(!('speechSynthesis' in window)) return;
+  function pick(){
+    const voices = window.speechSynthesis.getVoices();
+    ttsPreferredVoice = voices.find(v=>v.lang && v.lang.toLowerCase().startsWith('ko')) || voices[0] || null;
+  }
+  pick();
+  window.speechSynthesis.onvoiceschanged = pick;
+}
+initTTSVoices();
+
+function speak(text){
+  if(!text) return;
+  if(!('speechSynthesis' in window)) return;
+  try{
+    window.speechSynthesis.cancel(); // 알림이 겹치지 않도록 이전 발화는 취소하고 새로 읽는다
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'ko-KR';
+    if(ttsPreferredVoice) utter.voice = ttsPreferredVoice;
+    utter.rate = 1.02;
+    utter.pitch = 1.0;
+    window.speechSynthesis.speak(utter);
+  }catch(e){ console.warn('TTS failed', e); }
+}
+
+function escapeHtml(s){
+  return (s||"").replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// 로스터(대기실/대기화면) 목록의 한 줄을 만든다.
+// 방장이면 "닉네임: 방장"처럼 콜론으로 명확히 구분하고, 본인이면 이름 뒤에 "(나)"를 붙인다.
+// 이름과 태그가 붙어 보이지 않도록 항상 구분자를 넣는다.
+function formatRosterName(p){
+  const meTag = p.id === myId ? ' (나)' : '';
+  if(p.isHost){
+    return `<span class="name">${escapeHtml(p.nickname)}${meTag}<span class="tag-host">: 방장</span></span>`;
+  }
+  return `<span class="name">${escapeHtml(p.nickname)}${meTag}</span>`;
+}
+
+function renderRoomTypeBadge(el){
+  if(!el) return;
+  el.style.display = 'inline-flex';
+  if(roomType === 'video'){
+    el.className = 'room-type-badge video';
+    el.innerHTML = '🎥 영상통화 방입니다';
+  } else {
+    el.className = 'room-type-badge voice';
+    el.innerHTML = '🎙️ 음성통화 방입니다';
+  }
+}
+
+// ================= LANDING =================
+$('btnCreateVoice').addEventListener('click', ()=>onCreateRoom('voice'));
+$('btnCreateVideo').addEventListener('click', ()=>onCreateRoom('video'));
+$('btnJoinRoom').addEventListener('click', onJoinRoom);
+$('joinCodeInput').addEventListener('input', (e)=>{
+  e.target.value = e.target.value.replace(/[^0-9]/g,'');
+});
+$('joinCodeInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') onJoinRoom(); });
+
+function getNickname(){
+  let v = $('nicknameInput').value.trim();
+  if(!v) v = "손님" + Math.floor(Math.random()*900+100);
+  return v.slice(0,12);
+}
+
+// 방 만들기/참가하기를 누른 즉시(사용자 제스처 안에서) 미디어 권한을 요청한다.
+// 이미 필요한 트랙을 갖고 있으면 재요청하지 않는다.
+async function ensureMicAccess(wantVideo){
+  const needsVideo = !!wantVideo;
+  const hasAudio = localStream && localStream.getAudioTracks().some(t=>t.readyState==='live');
+  const hasVideo = localStream && localStream.getVideoTracks().some(t=>t.readyState==='live');
+  if(hasAudio && (!needsVideo || hasVideo)){
+    return true;
+  }
+  try{
+    // if we already have an audio-only stream but now need video, stop it and re-request both
+    if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream = null; }
+    speak(needsVideo ? "카메라와 마이크 권한을 허용해주세요." : "마이크 권한을 허용해주세요.");
+    localStream = await navigator.mediaDevices.getUserMedia({ audio:true, video: needsVideo });
+    return true;
+  }catch(e){
+    console.error('getUserMedia failed', e);
+    if(e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError'){
+      toast(needsVideo ? "카메라/마이크 권한이 차단되어 있어요. 브라우저 주소창의 자물쇠 아이콘에서 허용해주세요." : "마이크 권한이 차단되어 있어요. 브라우저 주소창의 자물쇠 아이콘에서 마이크를 허용해주세요.");
+    } else if(e.name === 'NotFoundError'){
+      toast(needsVideo ? "사용 가능한 카메라 또는 마이크를 찾을 수 없어요." : "사용 가능한 마이크를 찾을 수 없어요.");
+    } else {
+      toast("장치에 접근할 수 없어요: " + e.message);
+    }
+    return false;
+  }
+}
+
+async function onCreateRoom(type){
+  myNickname = getNickname();
+  $('btnCreateVoice').disabled = true;
+  $('btnCreateVideo').disabled = true;
+  $('btnJoinRoom').disabled = true;
+  $('createStatus').classList.remove('hidden');
+  $('createStatus').textContent = type === 'video' ? '카메라·마이크 권한 요청 중...' : '마이크 권한 요청 중...';
+
+  const micOk = await ensureMicAccess(type === 'video');
+  if(!micOk){
+    resetLandingButtons();
+    return;
+  }
+  $('createStatus').innerHTML = '빈 채널 확인 중<span class="dot-flicker"></span>';
+
+  isHost = true;
+  roomType = type;
+  maxMembers = MAX_MEMBERS_BY_TYPE[type] || MAX_MEMBERS_BY_TYPE.voice;
+
+  let n = 1;
+  tryClaim(n);
+
+  function tryClaim(num){
+    if(num > MAX_TRY){
+      toast("열 수 있는 채널이 없어요. 잠시 후 다시 시도해주세요.");
+      resetLandingButtons();
+      return;
+    }
+    const candidateId = ROOM_PREFIX + num;
+    const p = new Peer(candidateId, { debug: 0 });
+    let settled = false;
+
+    const failTimeout = setTimeout(()=>{
+      if(!settled){ settled = true; p.destroy(); tryClaim(num+1); }
+    }, 6000);
+
+    p.on('open', (id)=>{
+      if(settled) return;
+      settled = true;
+      clearTimeout(failTimeout);
+      // success: this number is ours
+      myPeer = p;
+      myId = id;
+      roomNumber = num;
+      setupHostPeerHandlers();
+      // 방장 자신은 members(=게스트 목록)에 넣지 않는다. getRosterArray()가
+      // 방장을 별도로 맨 앞에 추가하고, "혼자 남았는지" 판정도 members.size로만 세기 때문.
+      enterHostCallScreen();
+    });
+
+    p.on('error', (err)=>{
+      if(settled) return;
+      if(err.type === 'unavailable-id'){
+        settled = true;
+        clearTimeout(failTimeout);
+        p.destroy();
+        tryClaim(num+1);
+      } else {
+        settled = true;
+        clearTimeout(failTimeout);
+        console.error(err);
+        toast("연결 오류: " + err.type);
+        p.destroy();
+        resetLandingButtons();
+      }
+    });
+  }
+}
+
+function resetLandingButtons(){
+  $('btnCreateVoice').disabled = false;
+  $('btnCreateVideo').disabled = false;
+  $('btnJoinRoom').disabled = false;
+  $('createStatus').classList.add('hidden');
+  $('createStatus').innerHTML = '빈 채널 확인 중<span class="dot-flicker"></span>';
+  $('joinStatus').classList.add('hidden');
+  $('joinStatus').innerHTML = '연결 중<span class="dot-flicker"></span>';
+  isHost = false;
+}
+
+async function onJoinRoom(){
+  const code = $('joinCodeInput').value.trim();
+  if(!code){ toast("채널 번호를 입력해주세요."); return; }
+  myNickname = getNickname();
+  $('btnCreateVoice').disabled = true;
+  $('btnCreateVideo').disabled = true;
+  $('btnJoinRoom').disabled = true;
+  $('joinStatus').classList.remove('hidden');
+  $('joinStatus').textContent = '마이크 권한 요청 중...';
+
+  // 참가자는 이 시점엔 방 종류를 모르므로 우선 오디오만 확보한다.
+  // 방장이 수락하며 roomType을 알려주면, 영상 방일 경우 그때 카메라 권한을 추가로 요청한다.
+  const micOk = await ensureMicAccess(false);
+  if(!micOk){
+    resetLandingButtons();
+    return;
+  }
+  $('joinStatus').innerHTML = '연결 중<span class="dot-flicker"></span>';
+
+  roomNumber = parseInt(code,10);
+  hostPeerId = ROOM_PREFIX + roomNumber;
+
+  myPeer = new Peer({ debug: 0 });
+  myPeer.on('open', (id)=>{
+    myId = id;
+    setupJoinerPeerHandlers();
+    const conn = myPeer.connect(hostPeerId, { reliable:true, metadata:{ type:'join-request', nickname: myNickname } });
+    hostConn = conn;
+    let gotResponse = false;
+
+    const timeout = setTimeout(()=>{
+      if(!gotResponse){
+        toast("해당 채널을 찾을 수 없어요. 번호를 확인해주세요.");
+        cleanupAndReturnLanding();
+      }
+    }, 8000);
+
+    conn.on('open', ()=>{
+      conn.send({ type:'join-request', nickname: myNickname });
+      $('pendingRoomNum').textContent = roomNumber;
+      showView('pending');
+    });
+
+    conn.on('data', (data)=>{
+      gotResponse = true;
+      clearTimeout(timeout);
+      if(data.type === 'heartbeat-ack') return;
+      handleJoinerData(data);
+    });
+
+    // 유휴 상태(방장이 아직 수락/통화 시작을 안 한 동안)에서도 연결이 죽지 않도록
+    // 주기적으로 작은 핑을 보낸다. 일부 네트워크/브라우저 환경에서 오래 유휴 상태인
+    // WebRTC 데이터 채널이나 시그널링 연결이 끊기는 것을 방지한다.
+    const heartbeatInterval = setInterval(()=>{
+      if(conn.open){
+        try{ conn.send({ type:'heartbeat' }); }catch(e){}
+      }
+    }, 4000);
+
+    conn.on('close', ()=>{
+      clearInterval(heartbeatInterval);
+      if(!callStarted){
+        toast("방장과의 연결이 끊어졌어요.");
+        cleanupAndReturnLanding();
+      } else {
+        // 통화 중 방장과의 연결이 끊긴 경우: host-ended 메시지가 유실됐을 수 있으니
+        // 연결 종료 자체를 신호로 삼아 동일하게 처리한다. 그대로 두면 참가자 화면이
+        // 아무 변화 없이 통화방에 계속 남아있는 것처럼 보이는 문제가 있었다.
+        endCallAndReturn("방장의 퇴장으로 통화가 종료되었습니다.");
+      }
+    });
+
+    conn.on('error', (err)=>{
+      console.error('conn error', err);
+    });
+  });
+
+  myPeer.on('disconnected', ()=>{
+    // 시그널링 서버 연결만 끊긴 경우, 데이터 연결 자체는 살아있을 수 있으므로
+    // 즉시 종료 처리하지 않고 재연결을 시도한다.
+    console.warn('peer disconnected from signaling server, attempting reconnect');
+    try{ if(myPeer && !myPeer.destroyed) myPeer.reconnect(); }catch(e){}
+  });
+
+  myPeer.on('error', (err)=>{
+    console.error(err);
+    if(err.type === 'peer-unavailable'){
+      toast("해당 채널이 존재하지 않아요.");
+    } else if(err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error' || err.type === 'socket-closed'){
+      // 일시적 네트워크/서버 문제일 수 있으니, 이미 통화 중이거나 대기 화면에 진입했다면
+      // 곧바로 랜딩으로 돌려보내지 않고 재연결에 맡긴다.
+      if(!hostConn || !hostConn.open){
+        toast("연결 오류가 발생했어요. 다시 시도해주세요.");
+        cleanupAndReturnLanding();
+      }
+    } else {
+      toast("연결 오류가 발생했어요.");
+      cleanupAndReturnLanding();
+    }
+  });
+}
+
+$('btnCancelJoin').addEventListener('click', ()=>{
+  cleanupAndReturnLanding();
+});
+
+function cleanupAndReturnLanding(){
+  try{ if(hostConn) hostConn.close(); }catch(e){}
+  try{ if(myPeer) myPeer.destroy(); }catch(e){}
+  myPeer = null; myId = null; hostConn = null; hostPeerId = null;
+  roomType = 'voice'; maxMembers = MAX_MEMBERS_BY_TYPE.voice;
+  $('pendingRoomTypeBadge').style.display = 'none';
+  resetLandingButtons();
+  showView('landing');
+}
+
+// ================= HOST SIDE =================
+function setupHostPeerHandlers(){
+  myPeer.on('connection', (conn)=>{
+    conn.on('open', ()=>{
+      conn.send({ type:'room-info', roomType, roomNumber });
+    });
+    conn.on('data', (data)=>{
+      if(data.type === 'join-request'){
+        handleIncomingJoinRequest(conn, data.nickname);
+      } else if(data.type === 'heartbeat'){
+        try{ conn.send({ type:'heartbeat-ack' }); }catch(e){}
+      }
+    });
+    conn.on('close', ()=>{
+      handleMemberDisconnect(conn.peer);
+    });
+  });
+
+  myPeer.on('call', (call)=>{
+    // host receives media call from a participant (mesh audio)
+    call.answer(localStream);
+    call.on('stream', (remoteStream)=>{
+      attachRemoteStream(call.peer, remoteStream);
+    });
+    peerConnections.set(call.peer, call);
+  });
+
+  myPeer.on('disconnected', ()=>{
+    console.warn('host disconnected from signaling server, attempting reconnect');
+    try{ if(myPeer && !myPeer.destroyed) myPeer.reconnect(); }catch(e){}
+  });
+}
+
+function handleIncomingJoinRequest(conn, nickname){
+  const totalCount = 1 + members.size + pendingRequests.size; // +1은 방장 본인
+  if(totalCount > maxMembers){
+    conn.send({ type:'join-denied', reason:'full' });
+    setTimeout(()=>conn.close(), 300);
+    return;
+  }
+  pendingRequests.set(conn.peer, {conn, nickname});
+  sfx.knock();
+  toast(`${nickname}님이 입장을 요청했어요.`);
+  renderIncomingRequestsPanel();
+}
+
+function respondToRequest(peerId, accept){
+  const req = pendingRequests.get(peerId);
+  if(!req) return;
+  pendingRequests.delete(peerId);
+  if(accept){
+    if(1 + members.size >= maxMembers){ // +1은 방장 본인
+      req.conn.send({ type:'join-denied', reason:'full' });
+      setTimeout(()=>req.conn.close(), 300);
+      renderIncomingRequestsPanel();
+      return;
+    }
+    members.set(peerId, {conn: req.conn, nickname: req.nickname, joinedAt: Date.now(), seat: members.size+1});
+    wireHostDataDuringCall(req.conn, peerId);
+    const roster = getRosterArray();
+    req.conn.send({ type:'join-accepted', roomNumber, roomType, roster, hostId: myId, hostNickname: myNickname });
+    // 방장이 새 멤버에게 미디어 콜을 건다.
+    if(localStream && !peerConnections.has(peerId)){
+      const call = myPeer.call(peerId, localStream);
+      call.on('stream', (remoteStream)=>attachRemoteStream(peerId, remoteStream));
+      peerConnections.set(peerId, call);
+    }
+    // 기존 멤버들에게 새 멤버 정보를 알려서, 각자 새 멤버에게 미디어 콜을 걸도록 한다 (풀 메시 유지).
+    broadcastToMembers({ type:'peer-joined', peerId, nickname: req.nickname, roster }, peerId);
+    toast(`${req.nickname}님이 입장했습니다.`);
+    rebuildRosterUI();
+  } else {
+    req.conn.send({ type:'join-denied', reason:'rejected' });
+    setTimeout(()=>req.conn.close(), 300);
+  }
+  renderIncomingRequestsPanel();
+}
+
+function getRosterArray(){
+  const arr = [{ id: myId, nickname: myNickname, isHost:true }];
+  members.forEach((m, pid)=>{
+    if(pid !== myId) arr.push({ id: pid, nickname: m.nickname, isHost:false });
+  });
+  return arr;
+}
+
+function broadcastToMembers(msg, excludePid){
+  members.forEach((m, pid)=>{
+    if(pid === excludePid) return;
+    if(m.conn && m.conn.open) m.conn.send(msg);
+  });
+}
+
+function handleMemberDisconnect(peerId){
+  if(pendingRequests.has(peerId)){
+    pendingRequests.delete(peerId);
+    renderIncomingRequestsPanel();
+    return;
+  }
+  if(!members.has(peerId)) return;
+  const m = members.get(peerId);
+  members.delete(peerId);
+  // in-call disconnect
+  toast(`${m.nickname}님이 나갔습니다.`);
+  broadcastToMembers({ type:'system-msg', text: `${m.nickname}님이 나갔습니다.` });
+  pushChatMessage(null, `${m.nickname}님이 나갔습니다.`, true, false, true);
+  broadcastToMembers({ type:'roster-update', roster: getRosterArray() });
+  removeRemoteStream(peerId);
+  if(peerConnections.has(peerId)){ try{peerConnections.get(peerId).close();}catch(e){} peerConnections.delete(peerId); }
+  renderSpeakerGrid();
+  updateHostOnlyControls();
+  // 채널은 상시 열려있는 구조이므로, 방장 혼자 남아도 종료하지 않고
+  // "다른 사용자를 기다리는 중"인 대기 상태로 자연스럽게 전환된다.
+}
+
+function renderIncomingRequestsPanel(){
+  const badge = $('btnJoinRequests');
+  const countEl = $('joinRequestCount');
+  if(pendingRequests.size === 0){
+    badge.classList.add('hidden');
+  } else {
+    badge.classList.remove('hidden');
+    countEl.textContent = pendingRequests.size;
+  }
+
+  const reqWrap = $('callIncomingRequests');
+  const openPid = reqWrap.querySelector('.request-row.open')?.dataset.pid || null;
+  reqWrap.innerHTML = '';
+  pendingRequests.forEach((req, pid)=>{
+    const li = document.createElement('li');
+    li.className = 'request-row' + (pid === openPid ? ' open' : '');
+    li.dataset.pid = pid;
+    li.innerHTML = `
+      <div class="req-head">
+        <span class="req-pulse"></span>
+        <span class="req-name">${escapeHtml(req.nickname)}</span>
+        <span class="req-hint">입장 대기</span>
+        <span class="req-chevron">▾</span>
+      </div>
+      <div class="request-actions">
+        <button class="btn btn-ghost btn-deny">거절</button>
+        <button class="btn btn-primary btn-accept">수락</button>
+      </div>`;
+    li.querySelector('.req-head').addEventListener('click', ()=>{
+      li.classList.toggle('open');
+    });
+    li.querySelector('.btn-accept').addEventListener('click', (e)=>{
+      e.stopPropagation();
+      respondToRequest(pid, true);
+    });
+    li.querySelector('.btn-deny').addEventListener('click', (e)=>{
+      e.stopPropagation();
+      respondToRequest(pid, false);
+    });
+    reqWrap.appendChild(li);
+  });
+}
+
+$('btnJoinRequests').addEventListener('click', ()=>{
+  $('overlayJoinRequests').classList.remove('hidden');
+});
+$('closeJoinRequests').addEventListener('click', ()=> $('overlayJoinRequests').classList.add('hidden'));
+
+async function enterHostCallScreen(){
+  callStarted = true;
+  await enterCallScreen();
+}
+
+// ================= JOINER SIDE =================
+function setupJoinerPeerHandlers(){
+  myPeer.on('call', (call)=>{
+    call.answer(localStream);
+    call.on('stream', (remoteStream)=>{
+      attachRemoteStream(call.peer, remoteStream);
+    });
+    peerConnections.set(call.peer, call);
+  });
+  myPeer.on('connection', (conn)=>{
+    // mesh peer connecting to us for data too (rare) — accept but primary data is via hostConn
+    conn.on('data', (data)=>{ /* not used in star-hub model */ });
+  });
+}
+
+function handleJoinerData(data){
+  switch(data.type){
+    case 'room-info': {
+      roomType = data.roomType || 'voice';
+      renderRoomTypeBadge($('pendingRoomTypeBadge'));
+      break;
+    }
+    case 'join-accepted': {
+      roomNumber = data.roomNumber;
+      roomType = data.roomType || roomType;
+      hostPeerId = data.hostId;
+      roomRosterCache = data.roster;
+      callStarted = true;
+      toast("입장이 승인되었습니다.");
+      enterCallScreen();
+      break;
+    }
+    case 'join-denied': {
+      let msg = "입장이 거부되었습니다.";
+      if(data.reason === 'full') msg = "방 인원이 가득 찼습니다.";
+      toast(msg);
+      cleanupAndReturnLanding();
+      break;
+    }
+    case 'peer-joined': {
+      // 새 멤버가 들어왔다는 신호. 기존 로스터를 갱신하고, 그 새 멤버에게 미디어 콜을 건다 (풀 메시 유지).
+      // 새 멤버 쪽도 자기 로스터 기준으로 나에게 콜을 걸 수 있으므로, 중복 연결을 피하기 위해
+      // ID를 사전순으로 비교해서 더 작은 쪽만 먼저 거는 것으로 규칙을 통일한다.
+      roomRosterCache = data.roster;
+      rebuildRosterUI();
+      if(localStream && data.peerId !== myId && !peerConnections.has(data.peerId) && myId < data.peerId){
+        const call = myPeer.call(data.peerId, localStream);
+        call.on('stream', (remoteStream)=>attachRemoteStream(data.peerId, remoteStream));
+        peerConnections.set(data.peerId, call);
+      }
+      break;
+    }
+    case 'roster-update': {
+      roomRosterCache = data.roster;
+      rebuildRosterUI();
+      break;
+    }
+    case 'chat-msg': {
+      pushChatMessage(data.who, data.text, false);
+      break;
+    }
+    case 'system-msg': {
+      const isLeaveNotice = data.text.includes("나갔습니다") || data.text.includes("내보냈습니다");
+      pushChatMessage(null, data.text, true, false, isLeaveNotice);
+      if(data.text.includes("퇴장") || data.text.includes("종료")){
+        // handled elsewhere for host-leave case
+      } else {
+        toast(data.text);
+      }
+      break;
+    }
+    case 'mention': {
+      handleMentionReceived(data);
+      break;
+    }
+    case 'broadcast': {
+      showBroadcastBanner(data.text);
+      break;
+    }
+    case 'kicked': {
+      endCallAndReturn("방장에 의해 통화방에서 내보내졌습니다.");
+      break;
+    }
+    case 'host-ended': {
+      endCallAndReturn("방장의 퇴장으로 통화가 종료되었습니다.");
+      break;
+    }
+    case 'host-ping': {
+      // 탭을 순식간에 닫아버려 member-leave조차 못 보내는 최악의 상황을 대비한
+      // 안전망. 방장이 주기적으로 생존 확인을 보내오면 즉시 응답해서,
+      // 살아있는 동안은 방장이 나를 "죽은 사람"으로 오판하지 않도록 한다.
+      if(hostConn && hostConn.open){
+        try{ hostConn.send({ type:'member-pong' }); }catch(e){}
+      }
+      break;
+    }
+  }
+}
+
+// ================= CALL SCREEN (shared) =================
+async function enterCallScreen(){
+  await ensureMicAccess(roomType === 'video');
+  sfx.connect();
+  $('callRoomNum').textContent = roomNumber;
+  $('callTypeIcon').textContent = roomType === 'video' ? '🎥' : '🎙️';
+  $('btnCamera').classList.toggle('hidden', roomType !== 'video');
+  callStartTime = Date.now();
+  startCallTimer();
+  updateHostOnlyControls();
+  rebuildRosterUI();
+  showView('call');
+
+  // establish mesh audio connections
+  if(isHost){
+    // host calls each member (members already have conns opened when accepted)
+    members.forEach((m, pid)=>{
+      if(pid === myId) return;
+      if(!peerConnections.has(pid)){
+        const call = myPeer.call(pid, localStream);
+        call.on('stream', (remoteStream)=>attachRemoteStream(pid, remoteStream));
+        peerConnections.set(pid, call);
+      }
+    });
+  } else {
+    // joiner calls host + all other known peers in roster (full mesh)
+    roomRosterCache.forEach(p=>{
+      if(p.id === myId) return;
+      if(!peerConnections.has(p.id)){
+        const call = myPeer.call(p.id, localStream);
+        call.on('stream', (remoteStream)=>attachRemoteStream(p.id, remoteStream));
+        peerConnections.set(p.id, call);
+      }
+    });
+    // also accept incoming data connections from other joiners is not needed; chat relays via host
+  }
+
+  setupSpeakingDetection(myId, localStream, true);
+}
+
+function attachRemoteStream(peerId, stream){
+  const hasVideo = stream.getVideoTracks().length > 0;
+  let mediaEl = document.getElementById('media-'+peerId);
+  if(!mediaEl){
+    mediaEl = document.createElement(hasVideo ? 'video' : 'audio');
+    mediaEl.id = 'media-'+peerId;
+    mediaEl.autoplay = true;
+    mediaEl.playsInline = true;
+    mediaEl.dataset.peerId = peerId;
+    if(hasVideo){
+      mediaEl.muted = false;
+      mediaEl.className = 'tile-video';
+    } else {
+      document.body.appendChild(mediaEl);
+    }
+  }
+  mediaEl.srcObject = stream;
+  remoteStreams.set(peerId, { stream, hasVideo });
+  setupSpeakingDetection(peerId, stream, false);
+  rebuildRosterUI();
+}
+
+function removeRemoteStream(peerId){
+  const el = document.getElementById('media-'+peerId);
+  if(el){ el.srcObject = null; el.remove(); }
+  remoteStreams.delete(peerId);
+  if(speakingDetectors.has(peerId)){
+    try{ speakingDetectors.get(peerId).stop(); }catch(e){}
+    speakingDetectors.delete(peerId);
+  }
+}
+
+function setupSpeakingDetection(peerId, stream, isSelf){
+  if(!actx) return;
+  try{
+    const source = actx.createMediaStreamSource(stream);
+    const analyser = actx.createAnalyser();
+    analyser.fftSize = 512;
+    source.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    let stopped = false;
+    function loop(){
+      if(stopped) return;
+      analyser.getByteFrequencyData(data);
+      let sum=0; for(let i=0;i<data.length;i++) sum+=data[i];
+      const avg = sum/data.length;
+      const tile = document.getElementById('tile-'+peerId);
+      if(tile){
+        if(avg > 14 && !(isSelf && muted)) tile.classList.add('speaking');
+        else tile.classList.remove('speaking');
+      }
+      requestAnimationFrame(loop);
+    }
+    loop();
+    speakingDetectors.set(peerId, { stop: ()=>{ stopped = true; } });
+  }catch(e){ /* ignore */ }
+}
+
+function startCallTimer(){
+  clearInterval(callTimerInterval);
+  callTimerInterval = setInterval(()=>{
+    const sec = Math.floor((Date.now()-callStartTime)/1000);
+    const m = String(Math.floor(sec/60)).padStart(2,'0');
+    const s = String(sec%60).padStart(2,'0');
+    $('callTimer').textContent = `${m}:${s}`;
+  }, 1000);
+}
+
+function currentRosterList(){
+  if(isHost) return getRosterArray();
+  return roomRosterCache;
+}
+
+function rebuildRosterUI(){
+  renderSpeakerGrid();
+  if(isHost) renderMentionAndKickLists();
+  updateHostOnlyControls();
+}
+
+function renderSpeakerGrid(){
+  const grid = $('speakerGrid');
+  const roster = currentRosterList();
+  const isVideo = roomType === 'video';
+  const seenIds = new Set();
+
+  // 방(장)에 나 혼자뿐이면(=게스트 0명) "기다리는 중" 안내를 보여준다.
+  const aloneNotice = $('aloneNotice');
+  if(aloneNotice) aloneNotice.classList.toggle('hidden', roster.length > 1);
+
+  roster.forEach(p=>{
+    seenIds.add(p.id);
+    let tile = document.getElementById('tile-'+p.id);
+    if(!tile){
+      tile = document.createElement('div');
+      tile.id = 'tile-'+p.id;
+      grid.appendChild(tile);
+    }
+    tile.className = 'speaker-tile' + (p.id===myId ? ' me':'') + (isVideo ? ' has-video':'');
+
+    // preserve existing video-slot contents (the <video> element) across re-renders
+    let videoSlot = tile.querySelector('.video-slot');
+    tile.innerHTML = `
+      ${p.isHost?'<span class="tag-host2">방장</span>':''}
+      ${isVideo ? '<div class="video-slot"></div>' : ''}
+      <span class="mic-pulse"></span>
+      <div class="sname">${escapeHtml(p.nickname)}${p.id===myId?' (나)':''}</div>
+    `;
+    if(isVideo){
+      const newSlot = tile.querySelector('.video-slot');
+      if(videoSlot && videoSlot.firstChild){
+        newSlot.appendChild(videoSlot.firstChild);
+      } else if(p.id === myId && localStream && localStream.getVideoTracks().length){
+        const myVideo = document.createElement('video');
+        myVideo.autoplay = true; myVideo.muted = true; myVideo.playsInline = true;
+        myVideo.className = 'tile-video';
+        myVideo.srcObject = localStream;
+        newSlot.appendChild(myVideo);
+      } else if(p.id !== myId){
+        const existingMedia = document.getElementById('media-'+p.id);
+        if(existingMedia && existingMedia.tagName === 'VIDEO'){
+          newSlot.appendChild(existingMedia);
+        }
+      }
+    }
+  });
+
+  // remove tiles for people no longer in the roster
+  grid.querySelectorAll('.speaker-tile').forEach(tile=>{
+    const pid = tile.id.replace('tile-','');
+    if(!seenIds.has(pid)) tile.remove();
+  });
+}
+
+function updateHostOnlyControls(){
+  const roster = currentRosterList();
+  const showHostTools = isHost && roster.length > 2;
+  $('btnMention').classList.toggle('hidden', !showHostTools);
+  $('btnKick').classList.toggle('hidden', !showHostTools);
+  $('btnBroadcast').classList.toggle('hidden', !showHostTools);
+}
+
+// ---------- mute ----------
+$('btnMute').addEventListener('click', ()=>{
+  muted = !muted;
+  if(localStream){
+    localStream.getAudioTracks().forEach(t=>t.enabled = !muted);
+  }
+  const btn = $('btnMute');
+  btn.classList.toggle('mute-on', muted);
+  btn.querySelector('.ic').textContent = muted ? '🔇' : '🎙️';
+  btn.childNodes[btn.childNodes.length-1].textContent = muted ? '음소거됨' : '음소거';
+});
+
+// ---------- camera (video rooms only) ----------
+let cameraOff = false;
+$('btnCamera').addEventListener('click', ()=>{
+  cameraOff = !cameraOff;
+  if(localStream){
+    localStream.getVideoTracks().forEach(t=>t.enabled = !cameraOff);
+  }
+  const btn = $('btnCamera');
+  btn.classList.toggle('mute-on', cameraOff);
+  btn.querySelector('.ic').textContent = cameraOff ? '🚫' : '🎥';
+  btn.childNodes[btn.childNodes.length-1].textContent = cameraOff ? '카메라 꺼짐' : '카메라';
+});
+
+// ---------- leave ----------
+$('btnLeave').addEventListener('click', ()=>{
+  if(isHost){
+    // host leaving = end call for everyone
+    broadcastToMembers({ type:'host-ended' });
+    setTimeout(()=>{ fullTeardown(); showView('ended'); $('endedMessage').textContent = "방장의 퇴장으로 통화가 종료되었습니다."; speak("방장의 퇴장으로 통화가 종료되었습니다."); }, 150);
+  } else {
+    leaveAsMember("통화방에서 나왔습니다.");
+  }
+});
+
+// member-leave 메시지가 실제로 방장에게 "도착"했는지 확인(ack)한 뒤에 연결을 끊는다.
+// close() 직후 곧바로 연결을 닫아버리면, PeerJS/WebRTC 특성상 전송 중이던 데이터가
+// 유실되거나 상대측 close 이벤트 자체가 발화하지 않는 경우가 있어(특히 브라우저별
+// 차이), "보냈으니 됐겠지"라고 가정한 고정 타이머만으로는 방장 화면에 퇴장이
+// 반영되지 않는 문제가 있었다. ack를 기다리되, 응답이 없을 때를 대비해
+// 최대 대기 시간(폴백)도 함께 둔다.
+function leaveAsMember(endedMessage){
+  let done = false;
+  function finish(){
+    if(done) return;
+    done = true;
+    fullTeardown();
+    showView('ended');
+    $('endedMessage').textContent = endedMessage;
+    speak(endedMessage);
+  }
+  if(hostConn && hostConn.open){
+    hostConn.on('data', function ackListener(data){
+      if(data && data.type === 'member-leave-ack'){
+        finish();
+      }
+    });
+    try{ hostConn.send({ type:'member-leave', nickname: myAssignedName || myNickname }); }catch(e){ finish(); return; }
+    // ack가 늦거나 안 오는 네트워크 상황을 대비한 최대 대기 시간
+    setTimeout(finish, 1200);
+  } else {
+    finish();
+  }
+}
+
+// host relays chat messages arriving from a member's existing connection,
+// and handles explicit leave notifications (more reliable than waiting for the
+// underlying connection's 'close' event, which can be delayed or lost when the
+// remote peer destroys itself right after sending).
+//
+// 여기에 더해 "핑퐁 생존 감시"도 함께 건다. member-leave 메시지도, close 이벤트도
+// 전혀 도착하지 않는 최악의 경우(탭이 순식간에 통째로 죽어버려 JS가 한 줄도
+// 더 못 도는 경우 등)를 대비한 마지막 안전망이다. 방장이 주기적으로 ping을 보내고,
+// 응답이 일정 횟수 연속으로 없으면 "연락 두절"로 간주해 강제로 목록에서 정리한다.
+function wireHostDataDuringCall(conn, peerId){
+  let missedPings = 0;
+  const PING_INTERVAL_MS = 5000;
+  const MAX_MISSED = 3; // 5초 x 3 = 최대 15초 정도면 죽은 것으로 판단
+
+  const pingTimer = setInterval(()=>{
+    if(!conn.open){ clearInterval(pingTimer); return; }
+    if(!members.has(peerId)){ clearInterval(pingTimer); return; }
+    missedPings++;
+    if(missedPings > MAX_MISSED){
+      clearInterval(pingTimer);
+      // 일반 나가기와 동일한 경로로 처리해서, 채팅로그/사운드/roster 갱신이 똑같이 적용되게 한다.
+      handleMemberDisconnect(peerId);
+      return;
+    }
+    try{ conn.send({ type:'host-ping' }); }catch(e){}
+  }, PING_INTERVAL_MS);
+
+  conn.on('data', (data)=>{
+    // 어떤 데이터든 왔다는 건 살아있다는 뜻이니 감시 카운터를 리셋한다.
+    missedPings = 0;
+    if(data.type === 'member-pong'){
+      return;
+    }
+    if(data.type === 'chat-msg'){
+      const senderNick = members.get(peerId) ? members.get(peerId).nickname : '???';
+      pushChatMessage(senderNick, data.text, false);
+      broadcastToMembers({ type:'chat-msg', who: senderNick, text: data.text }, peerId);
+    } else if(data.type === 'member-leave'){
+      clearInterval(pingTimer);
+      handleMemberDisconnect(peerId);
+      // member-leave를 실제로 받았다는 것을 상대에게 확인시켜준다.
+      // 이 ack를 받기 전까지는 멤버 쪽에서 연결을 끊지 않도록 해서,
+      // "보냈다고 착각했지만 실제로는 도착 전에 연결이 끊겨 유실되는" 상황을 막는다.
+      try{ conn.send({ type:'member-leave-ack' }); }catch(e){}
+    }
+  });
+
+  conn.on('close', ()=>{
+    clearInterval(pingTimer);
+  });
+}
+
+function endCallAndReturn(message){
+  fullTeardown();
+  $('endedMessage').textContent = message;
+  showView('ended');
+  speak(message);
+}
+
+$('btnBackToMain').addEventListener('click', ()=>{
+  showView('landing');
+  resetLandingButtons();
+  $('joinCodeInput').value = '';
+});
+
+function fullTeardown(){
+  callStarted = false;
+  clearInterval(callTimerInterval);
+  peerConnections.forEach(c=>{ try{c.close();}catch(e){} });
+  peerConnections.clear();
+  remoteStreams.forEach((v,pid)=>removeRemoteStream(pid));
+  speakingDetectors.forEach(d=>{ try{d.stop();}catch(e){} });
+  speakingDetectors.clear();
+  if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null; }
+  members.clear();
+  pendingRequests.clear();
+  dataConns.clear();
+  chatMessages = [];
+  unreadChat = 0;
+  updateChatBadge();
+  try{ if(myPeer) myPeer.destroy(); }catch(e){}
+  myPeer = null; myId = null; hostConn = null; hostPeerId = null; roomNumber = null;
+  isHost = false; muted = false; cameraOff = false;
+  roomType = 'voice'; maxMembers = MAX_MEMBERS_BY_TYPE.voice;
+  $('btnMute').classList.remove('mute-on');
+  $('btnCamera').classList.remove('mute-on');
+  $('btnCamera').classList.add('hidden');
+  $('btnCamera').querySelector('.ic').textContent = '🎥';
+  $('btnCamera').childNodes[$('btnCamera').childNodes.length-1].textContent = '카메라';
+  if(broadcastHideTimer){ clearTimeout(broadcastHideTimer); broadcastHideTimer = null; }
+  $('broadcastBanner').classList.add('hidden');
+  $('broadcastBanner').innerHTML = '';
+  if(mentionHideTimer){ clearTimeout(mentionHideTimer); mentionHideTimer = null; }
+  $('mentionBanner').classList.add('hidden');
+  $('mentionBanner').innerHTML = '';
+}
+
+// ================= CHAT =================
+$('btnChat').addEventListener('click', ()=>{
+  $('overlayChat').classList.remove('hidden');
+  unreadChat = 0;
+  updateChatBadge();
+  renderChatLog();
+  setTimeout(()=>{ $('chatInput').focus(); }, 100);
+});
+$('closeChat').addEventListener('click', ()=> $('overlayChat').classList.add('hidden'));
+$('btnSendChat').addEventListener('click', sendChat);
+$('chatInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') sendChat(); });
+
+function sendChat(){
+  const input = $('chatInput');
+  const text = input.value.trim();
+  if(!text) return;
+  input.value = '';
+  const who = isHost ? myNickname : (myAssignedName || myNickname);
+  pushChatMessage(who, text, false, true);
+  if(isHost){
+    broadcastToMembers({ type:'chat-msg', who, text });
+  } else {
+    if(hostConn && hostConn.open) hostConn.send({ type:'chat-msg', text });
+  }
+}
+
+function pushChatMessage(who, text, isSys, isMine, isLeave){
+  chatMessages.push({ who, text, isSys, isMine });
+  renderChatLog();
+  if(!isMine){
+    if(isLeave){
+      sfx.leave();
+    } else if(isSys){
+      sfx.systemChime();
+    } else {
+      sfx.chatPop();
+    }
+    if($('overlayChat').classList.contains('hidden')){
+      unreadChat++;
+      updateChatBadge();
+    }
+  }
+}
+
+function updateChatBadge(){
+  $('chatBadge').classList.toggle('show', unreadChat>0);
+}
+
+function renderChatLog(){
+  const log = $('chatLog');
+  if(chatMessages.length === 0){
+    log.innerHTML = '<div class="chat-empty">아직 메시지가 없어요.</div>';
+    return;
+  }
+  log.innerHTML = chatMessages.map(m=>{
+    if(m.isSys){
+      return `<div class="chat-line"><span class="sys">· ${escapeHtml(m.text)}</span></div>`;
+    }
+    return `<div class="chat-line${m.isMine?' me':''}"><span class="who">${escapeHtml(m.who)}:</span><span class="msgtxt">${escapeHtml(m.text)}</span></div>`;
+  }).join('');
+  log.scrollTop = log.scrollHeight;
+}
+
+// ================= BROADCAST (host only) =================
+$('btnBroadcast').addEventListener('click', ()=>{
+  $('overlayBroadcast').classList.remove('hidden');
+  setTimeout(()=>{ $('broadcastInput').focus(); }, 100);
+});
+$('closeBroadcast').addEventListener('click', ()=> $('overlayBroadcast').classList.add('hidden'));
+$('broadcastInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') sendBroadcast(); });
+$('btnSendBroadcast').addEventListener('click', sendBroadcast);
+
+function sendBroadcast(){
+  const input = $('broadcastInput');
+  const text = input.value.trim().slice(0, 100);
+  if(!text) return;
+  input.value = '';
+  $('overlayBroadcast').classList.add('hidden');
+  // 채팅 로그에는 남기지 않고, 전원 화면에 배너로만 표시한다.
+  showBroadcastBanner(text);
+  broadcastToMembers({ type:'broadcast', text });
+}
+
+// 화면에 "방송: 내용"을 10초간 표시한다. 채팅 로그와는 별개의 채널.
+let broadcastHideTimer = null;
+function showBroadcastBanner(text){
+  const banner = $('broadcastBanner');
+  banner.innerHTML = `<b>방송:</b>${escapeHtml(text)}`;
+  banner.classList.remove('hidden');
+  // re-trigger the slide-in animation even if a broadcast is already showing
+  banner.style.animation = 'none';
+  void banner.offsetWidth;
+  banner.style.animation = '';
+  sfx.broadcast();
+  speak(`방송: ${text}`);
+  if(broadcastHideTimer) clearTimeout(broadcastHideTimer);
+  broadcastHideTimer = setTimeout(()=>{
+    banner.classList.add('hidden');
+  }, 10000);
+}
+
+// ================= MENTION (host only) =================
+$('btnMention').addEventListener('click', ()=>{
+  renderMentionAndKickLists();
+  $('overlayMention').classList.remove('hidden');
+});
+$('closeMention').addEventListener('click', ()=> $('overlayMention').classList.add('hidden'));
+$('btnSendMention').addEventListener('click', ()=>{
+  const targets = [];
+  document.querySelectorAll('.mention-row input[type=checkbox]:checked').forEach(cb=>targets.push(cb.dataset.pid));
+  if(targets.length===0){ toast("멘션할 사람을 선택해주세요."); return; }
+  members.forEach((m, pid)=>{
+    if(pid === myId) return;
+    if(targets.includes(pid)){
+      if(m.conn && m.conn.open) m.conn.send({ type:'mention' });
+    }
+  });
+  toast("멘션을 보냈습니다.");
+  $('overlayMention').classList.add('hidden');
+});
+
+function renderMentionAndKickLists(){
+  const mentionList = $('mentionList');
+  const kickList = $('kickList');
+  mentionList.innerHTML = '';
+  kickList.innerHTML = '';
+  const others = Array.from(members.entries()).filter(([pid])=>pid !== myId);
+  if(others.length === 0){
+    mentionList.innerHTML = '<div class="mention-empty">멘션할 수 있는 참가자가 없어요.</div>';
+  }
+  others.forEach(([pid, m])=>{
+    const row = document.createElement('label');
+    row.className = 'mention-row';
+    row.innerHTML = `<input type="checkbox" data-pid="${pid}"><span>${escapeHtml(m.nickname)}</span>`;
+    mentionList.appendChild(row);
+
+    const krow = document.createElement('div');
+    krow.className = 'kick-row';
+    krow.innerHTML = `<span class="name">${escapeHtml(m.nickname)}</span><button>내보내기</button>`;
+    krow.querySelector('button').addEventListener('click', ()=>{
+      $('overlayKick').classList.add('hidden');
+      openConfirmKick(pid, m.nickname);
+    });
+    kickList.appendChild(krow);
+  });
+}
+
+let mentionHideTimer = null;
+function handleMentionReceived(){
+  sfx.mention();
+  const banner = $('mentionBanner');
+  banner.innerHTML = '<b>나를 지목했습니다.</b>';
+  banner.classList.remove('hidden');
+  // re-trigger the slide-in animation even if a mention banner is already showing
+  banner.style.animation = 'none';
+  void banner.offsetWidth;
+  banner.style.animation = '';
+  speak('누군가 나를 멘션했습니다.');
+  if(mentionHideTimer) clearTimeout(mentionHideTimer);
+  mentionHideTimer = setTimeout(()=>{
+    banner.classList.add('hidden');
+  }, 10000);
+}
+
+// ================= KICK (host only) =================
+$('btnKick').addEventListener('click', ()=>{
+  renderMentionAndKickLists();
+  $('overlayKick').classList.remove('hidden');
+});
+$('closeKick').addEventListener('click', ()=> $('overlayKick').classList.add('hidden'));
+
+let kickTargetId = null;
+function openConfirmKick(pid, nickname){
+  kickTargetId = pid;
+  $('confirmKickText').textContent = `${nickname}님을 내보내시겠습니까?`;
+  $('overlayConfirmKick').classList.remove('hidden');
+}
+$('btnCancelKick').addEventListener('click', ()=>{
+  $('overlayConfirmKick').classList.add('hidden');
+  kickTargetId = null;
+});
+$('btnConfirmKick').addEventListener('click', ()=>{
+  if(!kickTargetId) return;
+  const m = members.get(kickTargetId);
+  if(m){
+    if(m.conn && m.conn.open) m.conn.send({ type:'kicked' });
+    setTimeout(()=>{ try{m.conn.close();}catch(e){} }, 200);
+    members.delete(kickTargetId);
+    removeRemoteStream(kickTargetId);
+    if(peerConnections.has(kickTargetId)){ try{peerConnections.get(kickTargetId).close();}catch(e){} peerConnections.delete(kickTargetId); }
+    broadcastToMembers({ type:'system-msg', text: `${m.nickname}님이 나갔습니다.` });
+    pushChatMessage(null, `${m.nickname}님을 내보냈습니다.`, true, false, true);
+    broadcastToMembers({ type:'roster-update', roster: getRosterArray() });
+    rebuildRosterUI();
+    toast(`${m.nickname}님을 내보냈습니다.`);
+    // 채널은 상시 열려있으므로, 다 내보내도 종료하지 않고 대기 상태로 남는다.
+  }
+  $('overlayConfirmKick').classList.add('hidden');
+  kickTargetId = null;
+});
+
+// for joiner: track assigned nickname (self) for chat "who" label consistency
+function trackMyAssignedName(){
+  myAssignedName = myNickname;
+}
+trackMyAssignedName();
+
+// ================= misc: unlock audio context on first interaction =================
+document.addEventListener('click', function unlock(){
+  if(actx && actx.state === 'suspended') actx.resume();
+}, { once:false });
+
+// ================= reliable leave-on-close handling =================
+// 탭을 닫거나 뒤로가기/새로고침 등으로 페이지를 벗어날 때, PeerJS의 conn.on('close')는
+// 브라우저가 곧바로 프로세스를 종료해버리면 아예 발화하지 않거나 크게 지연될 수 있다.
+// 그 결과 방장/다른 참가자 화면에는 나간 사람이 계속 목록에 남아있는 것처럼 보였다.
+//
+// 처음엔 여기서도 send() 직후 곧바로 close()를 불렀는데, 이게 오히려 문제였다.
+// send()는 메시지를 "전송 큐"에 넣기만 할 뿐 즉시 네트워크로 나가는 게 아니라서,
+// 바로 다음 줄에서 close()를 부르면 아직 큐에 있던 member-leave 메시지 자체가
+// 폐기될 수 있다(실제 RTCDataChannel도 이렇게 동작함). 탭을 급하게 닫는 상황에서는
+// 어차피 JS를 오래 붙잡고 있을 수 없으니, close()를 우리가 직접 부르지 않고
+// 메시지만 최대한 빨리 보낸 뒤 연결은 브라우저/OS가 자연스럽게 정리하도록 둔다.
+// 그러면 상대측 conn.on('close')가 (지연되더라도) 결국은 발화해서 안전망 역할을 한다.
+function notifyLeaveOnUnload(){
+  try{
+    if(isHost){
+      if(members.size > 0){
+        broadcastToMembers({ type:'host-ended' });
+      }
+    } else if(hostConn && hostConn.open){
+      hostConn.send({ type:'member-leave', nickname: myAssignedName || myNickname });
+    }
+  }catch(e){ /* best effort */ }
+  // 주의: 여기서 일부러 conn.close()나 myPeer.destroy()를 호출하지 않는다.
+  // 방금 보낸 메시지가 아직 전송 큐에 남아있을 수 있는데, 여기서 연결을 끊으면
+  // 그 메시지 자체가 취소되어 상대에게 전혀 도달하지 못할 위험이 있기 때문이다.
+  // 탭이 실제로 닫히면 이 연결은 브라우저/시그널링 서버에 의해 알아서 정리된다.
+}
+// pagehide fires reliably on tab close/refresh/navigation across mobile and desktop browsers,
+// including cases where 'beforeunload' is suppressed (e.g. iOS Safari background/close).
+window.addEventListener('pagehide', notifyLeaveOnUnload);
+// beforeunload as a fallback for older/other browsers that don't fire pagehide consistently.
+window.addEventListener('beforeunload', notifyLeaveOnUnload);
+
+// show my peer id hint (debug-friendly, subtle)
+window.addEventListener('load', ()=>{
+  $('myIdHint').textContent = '';
+});
+
+})();
+</script>
+</body>
+</html>
